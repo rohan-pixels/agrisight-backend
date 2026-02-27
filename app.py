@@ -1,3 +1,4 @@
+from flask_cors import CORS
 from flask import Flask, request, jsonify
 import numpy as np
 from PIL import Image
@@ -84,3 +85,4 @@ def home():
 
 if __name__ == "__main__":
     app.run()
+
