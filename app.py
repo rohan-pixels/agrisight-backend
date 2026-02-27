@@ -10,15 +10,15 @@ import time
 import firebase_admin
 from firebase_admin import credentials, db
 
-# --------------------------------------
-# Flask Init
-# --------------------------------------
+# -----------------------------------------
+# Flask Setup
+# -----------------------------------------
 app = Flask(__name__)
 CORS(app)
 
-# --------------------------------------
+# -----------------------------------------
 # Firebase Init (Railway Safe)
-# --------------------------------------
+# -----------------------------------------
 firebase_json = json.loads(os.environ["FIREBASE_CREDENTIALS"])
 cred = credentials.Certificate(firebase_json)
 
@@ -28,9 +28,9 @@ firebase_admin.initialize_app(cred, {
 
 db_ref = db.reference("detections")
 
-# --------------------------------------
+# -----------------------------------------
 # Load TFLite Model
-# --------------------------------------
+# -----------------------------------------
 interpreter = tf.lite.Interpreter(model_path="model.tflite")
 interpreter.allocate_tensors()
 
@@ -41,17 +41,17 @@ IMG_H = input_details[0]['shape'][1]
 IMG_W = input_details[0]['shape'][2]
 INPUT_DTYPE = input_details[0]['dtype']
 
-# --------------------------------------
+# -----------------------------------------
 # Load Labels
-# --------------------------------------
+# -----------------------------------------
 with open("labels.json", "r") as f:
     label_map = json.load(f)
 
 index_to_label = {v: k for k, v in label_map.items()}
 
-# --------------------------------------
-# Preprocess
-# --------------------------------------
+# -----------------------------------------
+# Image Preprocessing
+# -----------------------------------------
 def preprocess_image(image):
     image = image.resize((IMG_W, IMG_H))
     image = np.array(image)
@@ -64,12 +64,14 @@ def preprocess_image(image):
     image = np.expand_dims(image, axis=0)
     return image
 
-# --------------------------------------
+# -----------------------------------------
 # Routes
-# --------------------------------------
+# -----------------------------------------
+
 @app.route("/")
 def home():
     return "AgriSight Backend Running"
+
 
 @app.route("/predict", methods=["POST"])
 def predict():
@@ -79,9 +81,15 @@ def predict():
 
     try:
         file = request.files["file"]
+
+        # Read optional image_url sent from Pi
+        image_url = request.form.get("image_url", "")
+
+        # Load image
         image = Image.open(io.BytesIO(file.read())).convert("RGB")
         input_data = preprocess_image(image)
 
+        # Run inference
         interpreter.set_tensor(input_details[0]['index'], input_data)
         interpreter.invoke()
         output = interpreter.get_tensor(output_details[0]['index'])[0]
@@ -93,11 +101,12 @@ def predict():
         detection_id = str(int(time.time() * 1000))
         timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
 
+        # Save to Firebase
         db_ref.child(detection_id).set({
             "disease": disease,
             "confidence": confidence,
             "timestamp": timestamp,
-            "image_url": "",
+            "image_url": image_url,
             "action_status": "Not Treated"
         })
 
@@ -110,9 +119,10 @@ def predict():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# --------------------------------------
+
+# -----------------------------------------
 # Run
-# --------------------------------------
+# -----------------------------------------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
