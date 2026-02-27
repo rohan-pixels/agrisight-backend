@@ -3,3 +3,4 @@ numpy
 pillow
 tflite-runtime
 gunicorn
+flask-cors
