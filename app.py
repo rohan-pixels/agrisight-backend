@@ -1,17 +1,19 @@
-from flask_cors import CORS
 from flask import Flask, request, jsonify
+from flask_cors import CORS
+import tensorflow as tf
 import numpy as np
 from PIL import Image
 import io
 import json
-import tflite_runtime.interpreter as tflite
+import os
 
 app = Flask(__name__)
+CORS(app)
 
 # ===============================
 # Load TFLite Model
 # ===============================
-interpreter = tflite.Interpreter(model_path="model.tflite")
+interpreter = tf.lite.Interpreter(model_path="model.tflite")
 interpreter.allocate_tensors()
 
 input_details = interpreter.get_input_details()
@@ -19,6 +21,7 @@ output_details = interpreter.get_output_details()
 
 input_height = input_details[0]['shape'][1]
 input_width = input_details[0]['shape'][2]
+input_dtype = input_details[0]['dtype']
 
 # ===============================
 # Load Labels
@@ -29,14 +32,13 @@ with open("labels.json", "r") as f:
 index_to_label = {v: k for k, v in label_map.items()}
 
 # ===============================
-# Preprocess Function
+# Image Preprocessing
 # ===============================
 def preprocess_image(image):
     image = image.resize((input_width, input_height))
     image = np.array(image)
 
-    # Normalize if model expects float32
-    if input_details[0]['dtype'] == np.float32:
+    if input_dtype == np.float32:
         image = image.astype(np.float32) / 255.0
     else:
         image = image.astype(np.uint8)
@@ -45,8 +47,12 @@ def preprocess_image(image):
     return image
 
 # ===============================
-# Prediction Endpoint
+# Routes
 # ===============================
+@app.route("/")
+def home():
+    return "AgriSight Backend Running"
+
 @app.route("/predict", methods=["POST"])
 def predict():
 
@@ -78,11 +84,6 @@ def predict():
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/")
-def home():
-    return "AgriSight TFLite API Running"
-
-
 if __name__ == "__main__":
-    app.run()
-
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
